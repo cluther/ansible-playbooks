@@ -1,0 +1,5 @@
+---
+# file: galaxz16-zenpack-training.yml
+- hosts: galaxz16-zenpack-training
+  roles:
+    - galaxz16-zenpack-training

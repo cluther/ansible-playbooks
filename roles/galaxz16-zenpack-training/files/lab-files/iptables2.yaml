@@ -1,0 +1,30 @@
+name: ZenPacks.training.IPTables2
+
+device_classes:
+  /:
+    templates:
+      IPTablesSSHNagios:
+        datasources:
+          iptables:
+            type: COMMAND
+            usessh: true
+            commandTemplate: "/home/zenoss/iptables-ssh-nagios"
+            parser: Nagios
+            cycletime: 10
+            datapoints:
+              INPUTbytes: DERIVE_MIN_0
+              INPUTpackets: DERIVE_MIN_0
+              OUTPUTbytes: DERIVE_MIN_0
+              OUTPUTpackets: DERIVE_MIN_0
+
+        graphs:
+          IPTables - Packets:
+            units: packets/sec
+            miny: 0
+
+            graphpoints:
+              INPUT:
+                dpName: iptables_INPUTpackets
+
+              OUTPUT:
+                dpName: iptables_OUTPUTpackets

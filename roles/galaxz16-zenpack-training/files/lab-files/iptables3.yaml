@@ -1,0 +1,30 @@
+name: ZenPacks.training.IPTables3
+
+device_classes:
+  /:
+    templates:
+      IPTablesSSHCustom:
+        datasources:
+          iptables:
+            type: COMMAND
+            usessh: true
+            commandTemplate: "/usr/sbin/iptables -nvxL"
+            parser: ZenPacks.training.IPTables3.parsers.iptables
+            cycletime: 10
+            datapoints:
+              INPUTbytes: DERIVE_MIN_0
+              INPUTpackets: DERIVE_MIN_0
+              OUTPUTbytes: DERIVE_MIN_0
+              OUTPUTpackets: DERIVE_MIN_0
+
+        graphs:
+          IPTables - Packets:
+            units: packets/sec
+            miny: 0
+
+            graphpoints:
+              INPUT:
+                dpName: iptables_INPUTpackets
+
+              OUTPUT:
+                dpName: iptables_OUTPUTpackets

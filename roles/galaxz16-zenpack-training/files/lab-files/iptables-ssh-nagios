@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+import os, re, subprocess, sys
+
+# Handle command line arguments.
+script = os.path.basename(__file__)
+
+# Run iptables.
+try:
+    with open(os.devnull, "w") as devnull:
+        output = subprocess.check_output([
+            "/usr/sbin/iptables",
+            "-nvxL"],
+            stderr=devnull)
+except Exception as e:
+    sys.exit("{} failed: {}".format(script, e))
+
+# Parse per-chain packets and bytes values.
+values = {}
+
+for line in output.splitlines():
+    match = re.match(
+        r'^Chain (?P<chain>\S+) \(policy \S+ '
+        r'(?P<packets>\d+) packets, '
+        r'(?P<bytes>\d+) bytes\)$',
+        line)
+
+    if match:
+        for measure in ("packets", "bytes"):
+            values_key = "{}{}".format(
+                match.group("chain"),
+                measure)
+
+            values[values_key] = int(match.group(measure))
+
+# Turn values dictionary into list of <datapoint>=<value> pairs.
+pairs = ["{}={}".format(k, v) for k, v in values.items()]
+
+# Print event summary, pipe, and space-delimited pairs.
+print "OK|{}".format(" ".join(pairs))

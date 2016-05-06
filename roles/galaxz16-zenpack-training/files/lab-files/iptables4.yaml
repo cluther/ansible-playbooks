@@ -1,0 +1,49 @@
+name: ZenPacks.training.IPTables4
+
+class_relationships:
+  - Products.ZenModel.Device.Device(iptablesChains) 1:MC (server)Chain
+
+classes:
+  Chain:
+    base: [zenpacklib.Component]
+    label: IPTables Chain
+
+    properties:
+      policy:
+        label: Policy
+
+
+device_classes:
+  /:
+    templates:
+      IPTablesChain:
+        targetPythonClass: ZenPacks.training.IPTables4.Chain
+
+        datasources:
+          iptables:
+            type: COMMAND
+            usessh: true
+            commandTemplate: "/usr/sbin/iptables -nvxL"
+            parser: ZenPacks.training.IPTables4.parsers.iptables
+            component: "${here/id}"
+            cycletime: 10
+            datapoints:
+              bytes: DERIVE_MIN_0
+              packets: DERIVE_MIN_0
+
+        graphs:
+          IPTables - Packets:
+            units: packets/sec
+            miny: 0
+
+            graphpoints:
+              Bytes:
+                dpName: iptables_packets
+
+          IPTables - Bytes:
+            units: bytes/sec
+            miny: 0
+
+            graphpoints:
+              Packets:
+                dpName: iptables_bytes

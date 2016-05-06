@@ -1,0 +1,7 @@
+---
+# file: roles/galaxz16-zenpack-training/handlers/main.yml
+- name: reload systemd
+  command: systemctl daemon-reload
+
+- name: restart serviced
+  service: name=serviced state=restarted

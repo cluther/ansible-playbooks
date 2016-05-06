@@ -1,0 +1,137 @@
+---
+# file: roles/galaxz16-zenpack-training/tasks/main.yml
+- name: Disable amazon-id yum plugin
+  lineinfile:
+    dest: /etc/yum/pluginconf.d/amazon-id.conf
+    regexp: "^enabled="
+    line: "enabled=0"
+
+- name: Allow wheel to sudo without password
+  lineinfile:
+    dest: /etc/sudoers
+    regexp: "^%wheel[ \t]"
+    line: "%wheel ALL=(ALL) NOPASSWD: ALL"
+    validate: "visudo -cf %s"
+
+- name: Setup zenoss group
+  group: name=zenoss gid=1206
+
+- name: Setup zenoss user
+  user: name=zenoss uid=1337 groups=wheel,docker append=yes
+
+- name: Verify /home/zenoss ownership
+  file: dest=/home/zenoss owner=zenoss group=zenoss recurse=yes
+
+- name: Setup zenoss user authorized_keys
+  authorized_key:
+    user=zenoss
+    key="ssh-dss AAAAB3NzaC1kc3MAAACBANtdnScvtdgdWmox8LaxLPZg/QUZKtLkgDo6xaO3wBEKPcD2AtD082S3ak7IQY+Mz4u0gHbvJO0rIxH2+EImZTsB0phLr8iyArQelSuko2N62Y23k/LKm6Oc4QGpNON/bNqmoAeHgAZ3iOOlQ+CP6s6apsXKa6gmvMV/qwvgt86vAAAAFQDKkPrjQc2fQZree3izSi6I0ITfZwAAAIA9zAlHuAcaT+ugvY1FXr3JdUJBn6qz+kvIm5k9JR/aHsp0F7YcnCL+w9os2Fh9FzOyuuauGo1OZWh8Ujf+y6g3MPi50M3FxK16b8XI8Hdz0X8c+pwPiK4PdBAanWw5lsOmXTmmQZM1u6+XQBuOtE+ei7/5+nyyiLK+nV3IO6//dQAAAIEAgo7Hj6Ifqis+glDhkpgVxowKGrNYAJh6oI/9GFF+IShCA6MD3QYSYyoYhc58OvE2BI9/+eQbPcMDYlISY172zM9FVcqK6aPMv7u6ClmektqIYWh1a9O/IQh6qiOVTrHh8r8iGVWW6zaD18T0hH0YDQgV8Mta2/9eUutkOdJDdCo= zenoss_student"
+
+- name: Install VIM
+  package: name=vim state=latest
+
+- name: Configure VIM
+  copy: src={{ item }} dest=/home/zenoss/ owner=zenoss group=zenoss
+  with_items:
+    - .vimrc
+    - .vim
+
+- name: Setup zenoss user's .bashrc
+  blockinfile:
+    dest: /home/zenoss/.bashrc
+    insertbefore: "# User specific aliases and functions"
+    block: |
+      alias vi=vim
+
+      # ZenPack development helpers.
+      alias zope='serviced service attach zope su zenoss -l'
+      alias zenhub='serviced service attach zenhub su zenoss -l'
+      z () { serviced service attach zope su zenoss -l -c "cd /z;$*"; }
+      zenbatchload () { z zenbatchload $*; }
+      zendisc () { z zendisc $*; }
+      zendmd () { z zendmd $*; }
+      zenmib () { z zenmib $*; }
+      zenmodeler () { z zenmodeler $*; }
+      zenpack () { z zenpack $*; }
+      zenpacklib () { z /z/zenpacklib.py $*; }
+      zenpython () { z zenpython $*; }
+
+- name: Copy lab files to /home/zenoss/files/
+  copy: src=lab-files/ dest=/home/zenoss/files owner=zenoss group=zenoss
+
+# Control Center
+
+- name: Add /z directory
+  file: path=/z state=directory mode=0755 owner=zenoss group=zenoss
+
+- name: configure serviced to mount /z
+  lineinfile:
+    dest: /lib/systemd/system/serviced.service
+    regexp: "^ExecStart="
+    line: "ExecStart=/opt/serviced/bin/serviced --mount *,/z,/z"
+
+  notify:
+    - reload systemd
+    - restart serviced
+
+- name: enable and start docker and serviced services
+  service: name={{ item }} state=started enabled=yes
+  with_items:
+    - docker
+    - serviced
+
+- name: add serviced host
+  serviced_host:
+    ip: "{{ ansible_default_ipv4.address }}"
+    pool: default
+    state: present
+
+- name: deploy Zenoss.core template
+  serviced_template:
+    name: Zenoss.core
+    pool: default
+    deployment: train
+    state: deployed
+
+- name: set collector services to manual launch
+  serviced_service:
+    name: Zenoss.core/localhost/localhost/{{ item }}
+    state: stopped
+    launch: manual
+
+  with_items:
+    - zenjmx
+    - zenmodeler
+    - zenperfsnmp
+    - zenping
+    - zenprocess
+    - zenpython
+    - zenstatus
+    - zensyslog
+    - zentrap
+
+- name: start Zenoss.core service
+  serviced_service:
+    name: Zenoss.core
+    state: started
+    auto_launch: yes
+
+- name: execute zendmd code
+  tags: test
+  zendmd:
+    state: run
+    creates: /z/.galaxz16-zenpack-training-zendmd-executed
+    code: |
+      # Set admin password
+      app.acl_users.userManager.updateUserPassword("admin", "{{ galaxz16_student_password }}")
+
+      # Disable the quick-start wizard.
+      dmd._rq = True
+
+      # Disable broken modeler plugin.
+      dc = dmd.Devices.Server.SSH.Linux
+      plugins = dc.zCollectorPlugins
+      plugin_name = "zenoss.cmd.linux.netstat_an"
+      dc.zCollectorPlugins = [x for x in plugins if x != plugin_name]
+
+      commit()
