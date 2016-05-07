@@ -1,6 +1,4 @@
 import re
-
-# Extend CommandParser when writing parsers.
 from Products.ZenRRD.CommandParser import CommandParser
 
 
@@ -20,11 +18,7 @@ class iptables(CommandParser):
 
             if match:
                 for measure in ("packets", "bytes"):
-                    values_key = "{}{}".format(
-                        match.group("chain"),
-                        measure)
-
-                    # Add CHAINmeasure key and its value to values.
+                    values_key = "{}{}".format(match.group("chain"), measure)
                     values[values_key] = int(match.group(measure))
 
         # Add values to result only for all matching datapoints.

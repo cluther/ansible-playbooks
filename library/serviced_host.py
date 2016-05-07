@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import json
+import time
 
 
 class ServicedHost(object):
@@ -17,32 +18,17 @@ class ServicedHost(object):
 
         self.serviced_cmd = self.module.get_bin_path("serviced", required=True)
 
+        self.host_id = None
         self.changed = False
 
         if self.state == "present":
-            self.present()
+            while not self.present():
+                time.sleep(1)
 
     def present(self):
-        # Check if host is already present.
-        _, out, _ = self.module.run_command(
-            "%s host list -v" % self.serviced_cmd)
-
-        try:
-            hosts = json.loads(out)
-        except Exception:
-            # No hosts.
-            pass
-        else:
-            for host in hosts:
-                criteria = (
-                    host.get("IPAddr") == self.ip,
-                    host.get("RPCPort") == self.port,
-                    host.get("PoolID") == self.pool,
-                    )
-
-                if all(criteria):
-                    # Host is already added.
-                    return
+        host = self.find_host()
+        if host:
+            return True
 
         # Add host.
         _, out, _ = self.module.run_command(
@@ -52,7 +38,32 @@ class ServicedHost(object):
                 self.port,
                 self.pool))
 
-        self.changed = True
+        host = self.find_host()
+        if host:
+            self.changed = True
+            return True
+        else:
+            return False
+
+    def find_host(self):
+        _, out, _ = self.module.run_command(
+            "%s host list -v" % self.serviced_cmd)
+
+        try:
+            hosts = json.loads(out)
+        except Exception:
+            return
+        else:
+            for host in hosts:
+                criteria = (
+                    host.get("IPAddr") == self.ip,
+                    host.get("RPCPort") == self.port,
+                    host.get("PoolID") == self.pool,
+                    )
+
+                if all(criteria):
+                    self.host_id = host.get("ID")
+                    return host
 
 
 def main():
@@ -71,6 +82,7 @@ def main():
         port=result.port,
         pool=result.pool,
         state=result.state,
+        host_id=result.host_id,
         changed=result.changed,
         )
 

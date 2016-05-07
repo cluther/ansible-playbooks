@@ -12,7 +12,6 @@ classes:
       policy:
         label: Policy
 
-
 device_classes:
   /:
     templates:
@@ -37,7 +36,7 @@ device_classes:
             miny: 0
 
             graphpoints:
-              Bytes:
+              Packets:
                 dpName: iptables_packets
 
           IPTables - Bytes:
@@ -45,5 +44,5 @@ device_classes:
             miny: 0
 
             graphpoints:
-              Packets:
+              Bytes:
                 dpName: iptables_bytes

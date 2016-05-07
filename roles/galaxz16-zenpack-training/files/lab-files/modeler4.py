@@ -14,7 +14,7 @@ class iptables(CommandPlugin):
     modname = "ZenPacks.training.IPTables4.Chain"
 
     # Command to run on monitored device.
-    command = "/sbin/iptables -nvxL"
+    command = "/usr/sbin/iptables -nvxL"
 
     def process(self, device, results, log):
         log.info(
@@ -38,5 +38,4 @@ class iptables(CommandPlugin):
                     "policy": match.group("policy"),
                     }))
 
-        # Return filled RelationshipMap.
         return rm

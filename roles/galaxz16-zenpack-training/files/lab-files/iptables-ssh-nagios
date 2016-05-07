@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import os, re, subprocess, sys
 
-# Handle command line arguments.
+# Find name of script.
 script = os.path.basename(__file__)
 
 # Run iptables.

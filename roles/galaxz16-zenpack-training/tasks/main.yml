@@ -24,8 +24,8 @@
 
 - name: Setup zenoss user authorized_keys
   authorized_key:
-    user=zenoss
-    key="ssh-dss AAAAB3NzaC1kc3MAAACBANtdnScvtdgdWmox8LaxLPZg/QUZKtLkgDo6xaO3wBEKPcD2AtD082S3ak7IQY+Mz4u0gHbvJO0rIxH2+EImZTsB0phLr8iyArQelSuko2N62Y23k/LKm6Oc4QGpNON/bNqmoAeHgAZ3iOOlQ+CP6s6apsXKa6gmvMV/qwvgt86vAAAAFQDKkPrjQc2fQZree3izSi6I0ITfZwAAAIA9zAlHuAcaT+ugvY1FXr3JdUJBn6qz+kvIm5k9JR/aHsp0F7YcnCL+w9os2Fh9FzOyuuauGo1OZWh8Ujf+y6g3MPi50M3FxK16b8XI8Hdz0X8c+pwPiK4PdBAanWw5lsOmXTmmQZM1u6+XQBuOtE+ei7/5+nyyiLK+nV3IO6//dQAAAIEAgo7Hj6Ifqis+glDhkpgVxowKGrNYAJh6oI/9GFF+IShCA6MD3QYSYyoYhc58OvE2BI9/+eQbPcMDYlISY172zM9FVcqK6aPMv7u6ClmektqIYWh1a9O/IQh6qiOVTrHh8r8iGVWW6zaD18T0hH0YDQgV8Mta2/9eUutkOdJDdCo= zenoss_student"
+    user: zenoss
+    key: "ssh-dss AAAAB3NzaC1kc3MAAACBANtdnScvtdgdWmox8LaxLPZg/QUZKtLkgDo6xaO3wBEKPcD2AtD082S3ak7IQY+Mz4u0gHbvJO0rIxH2+EImZTsB0phLr8iyArQelSuko2N62Y23k/LKm6Oc4QGpNON/bNqmoAeHgAZ3iOOlQ+CP6s6apsXKa6gmvMV/qwvgt86vAAAAFQDKkPrjQc2fQZree3izSi6I0ITfZwAAAIA9zAlHuAcaT+ugvY1FXr3JdUJBn6qz+kvIm5k9JR/aHsp0F7YcnCL+w9os2Fh9FzOyuuauGo1OZWh8Ujf+y6g3MPi50M3FxK16b8XI8Hdz0X8c+pwPiK4PdBAanWw5lsOmXTmmQZM1u6+XQBuOtE+ei7/5+nyyiLK+nV3IO6//dQAAAIEAgo7Hj6Ifqis+glDhkpgVxowKGrNYAJh6oI/9GFF+IShCA6MD3QYSYyoYhc58OvE2BI9/+eQbPcMDYlISY172zM9FVcqK6aPMv7u6ClmektqIYWh1a9O/IQh6qiOVTrHh8r8iGVWW6zaD18T0hH0YDQgV8Mta2/9eUutkOdJDdCo= zenoss_student"
 
 - name: Install VIM
   package: name=vim state=latest
@@ -64,6 +64,22 @@
 - name: Add /z directory
   file: path=/z state=directory mode=0755 owner=zenoss group=zenoss
 
+- name: Download zenpacklib.py to /z
+  get_url:
+    dest: /z/zenpacklib.py
+    url: http://zenpacklib.zenoss.com/zenpacklib.py
+    owner: zenoss
+    group: zenoss
+    mode: 0750
+
+- name: copy monitoring_id_rsa to /z
+  copy: src=monitoring_id_rsa dest=/z/ owner=zenoss group=zenoss mode=0600
+
+- name: authorize monitoring_id_rsa for root
+  authorized_key:
+    user: root
+    key: "{{ lookup('file', 'monitoring_id_rsa.pub') }}"
+
 - name: configure serviced to mount /z
   lineinfile:
     dest: /lib/systemd/system/serviced.service
@@ -87,6 +103,7 @@
     state: present
 
 - name: deploy Zenoss.core template
+  register: serviced_template
   serviced_template:
     name: Zenoss.core
     pool: default
@@ -116,8 +133,18 @@
     state: started
     auto_launch: yes
 
+- name: wait for DFS to exist
+  wait_for: path=/opt/serviced/var/volumes/{{ serviced_template.service_id }}
+
+- name: copy monitoring_id_rsa to container id_rsa
+  copy:
+    src: monitoring_id_rsa
+    dest: /opt/serviced/var/volumes/{{ serviced_template.service_id }}/.ssh/id_rsa
+    owner: zenoss
+    group: zenoss
+    mode: 0600
+
 - name: execute zendmd code
-  tags: test
   zendmd:
     state: run
     creates: /z/.galaxz16-zenpack-training-zendmd-executed
@@ -128,10 +155,27 @@
       # Disable the quick-start wizard.
       dmd._rq = True
 
+      # Use cookie authentication so logins don't timeout.
+      from Products.ZenUtils.Security import activateCookieBasedAuthentication
+      activateCookieBasedAuthentication(app)
+      activateCookieBasedAuthentication(zport)
+      dmd.userAuthType = dmd.AUTH_TYPE_COOKIE
+
       # Disable broken modeler plugin.
       dc = dmd.Devices.Server.SSH.Linux
       plugins = dc.zCollectorPlugins
       plugin_name = "zenoss.cmd.linux.netstat_an"
       dc.zCollectorPlugins = [x for x in plugins if x != plugin_name]
+
+      # Add a device.
+      d = find("trainer")
+      if not d:
+        d = dc.createInstance("trainer")
+
+      d.setPerformanceMonitor("localhost")
+      d.setManageIp("172.17.42.1")
+      d.setZenProperty("zCommandUsername", "root")
+      d.setZenProperty("zKeyPath", "/z/monitoring_id_rsa")
+      d.collectDevice(background=True)
 
       commit()

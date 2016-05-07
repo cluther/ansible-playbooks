@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import json
+import time
 
 
 class ServicedTemplate(object):
@@ -17,32 +18,17 @@ class ServicedTemplate(object):
 
         self.serviced_cmd = self.module.get_bin_path("serviced", required=True)
 
+        self.service_id = None
         self.changed = False
 
         if self.state == "deployed":
-            self.deployed()
+            while not self.deployed():
+                time.sleep(1)
 
     def deployed(self):
-        # Check if template has already been deployed.
-        _, out, _ = self.module.run_command(
-            "%s service list -v" % self.serviced_cmd)
-
-        try:
-            services = json.loads(out)
-        except Exception:
-            # No services are deployed.
-            pass
-        else:
-            for service in services:
-                criteria = (
-                    service.get("Name") == self.name,
-                    service.get("PoolID") == self.pool,
-                    service.get("DeploymentID") == self.deployment,
-                    )
-
-                if all(criteria):
-                    # Template is already deployed.
-                    return
+        service = self.find_service()
+        if service:
+            return True
 
         # Find ID of template.
         _, out, _ = self.module.run_command(
@@ -59,6 +45,33 @@ class ServicedTemplate(object):
         _, out, _ = self.module.run_command(
             "%s template deploy %s %s %s" % (
                 self.serviced_cmd, template_id, self.pool, self.deployment))
+
+        service = self.find_service()
+        if service:
+            self.changed = True
+            return True
+        else:
+            return False
+
+    def find_service(self):
+        _, out, _ = self.module.run_command(
+            "%s service list -v" % self.serviced_cmd)
+
+        try:
+            services = json.loads(out)
+        except Exception:
+            return
+        else:
+            for service in services:
+                criteria = (
+                    service.get("Name") == self.name,
+                    service.get("PoolID") == self.pool,
+                    service.get("DeploymentID") == self.deployment,
+                    )
+
+                if all(criteria):
+                    self.service_id = service.get("ID")
+                    return service
 
 
 def main():
@@ -77,6 +90,7 @@ def main():
         pool=result.pool,
         deployment=result.deployment,
         state=result.state,
+        service_id=result.service_id,
         changed=result.changed,
         )
 
