@@ -90,11 +90,8 @@
     - reload systemd
     - restart serviced
 
-- name: enable and start docker and serviced services
-  service: name={{ item }} state=started enabled=yes
-  with_items:
-    - docker
-    - serviced
+- name: enable and start serviced service
+  service: name=serviced state=started enabled=yes
 
 - name: add serviced host
   serviced_host:
